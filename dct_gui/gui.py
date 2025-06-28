@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, 
-                             QAction, QFileDialog, QMessageBox)
+                             QAction, QFileDialog, QMessageBox, QTextEdit)
 from PyQt5.QtGui import QIcon
 from yaml_loader import load_yaml_test
+from test_runner import TestRunner
 import sys
 
 class DCTGui(QMainWindow):
@@ -12,6 +13,10 @@ class DCTGui(QMainWindow):
         self._create_actions_()
         self._create_menu_bar()
         self._create_tools_bars()
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+        self.setCentralWidget(self.log_output)
+        self.test_runner = TestRunner()
 
     def _create_actions_(self):
         """Create actions for the menu bar."""
@@ -56,7 +61,11 @@ class DCTGui(QMainWindow):
         self.about_action = QAction("About", self)
         self.hotkeys_action = QAction("Hot Keys", self)
         self.tips_action = QAction("Tips", self)
-        self.documentation_action = QAction("Documentation", self)        
+        self.documentation_action = QAction("Documentation", self)
+
+        #create actions for test menu
+        self.run_test_action = QAction("Run Test", self)
+        self.run_test_action.triggered.connect(self.run_test)
 
     def _create_tools_bars(self):
         """Create toolbars for the main window."""
@@ -78,6 +87,9 @@ class DCTGui(QMainWindow):
         view_toolbar = self.addToolBar("View")
         view_toolbar.addAction(self.toggle_log_action)
         view_toolbar.addAction(self.history_log_action)
+
+        #Create tool bar for test actions
+        file_toolbar.addAction(self.run_test_action)
         
     def _create_menu_bar(self):
         """Create the menu bar with various menus and actions."""
@@ -129,6 +141,7 @@ class DCTGui(QMainWindow):
         if file_path:
             try:
                 data = load_yaml_test(file_path)
+                self.test_runner.load_test(data)
                 if data is None:
                     QMessageBox.warning(self, "Warning", "The file is empty or could not be loaded.")
                 else:
@@ -146,6 +159,13 @@ class DCTGui(QMainWindow):
                 QMessageBox.information(self, "Test File Info", formatted)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load file: {e}")
+    
+    def run_test(self):
+        """Run the loaded test and display the results."""
+        results = self.test_runner.run_test()
+        formatted = self.test_runner.format_results(results)
+        self.log_output.append(formatted)
+        QMessageBox.information(self, "Test Results", formatted)
 
 
 if __name__ == "__main__":
