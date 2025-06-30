@@ -1,6 +1,9 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, 
-                             QAction, QFileDialog, QMessageBox, QTextEdit)
+                        QAction, QFileDialog, QMessageBox, QTextEdit, 
+                        QStackedWidget, QWidget, QPushButton, QVBoxLayout, 
+                        QLabel, QHBoxLayout, QSizePolicy, QGroupBox, QGridLayout)
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt
 from yaml_loader import load_yaml_test
 from test_runner import TestRunner
 import sys
@@ -13,10 +16,13 @@ class DCTGui(QMainWindow):
         self._create_actions_()
         self._create_menu_bar()
         self._create_tools_bars()
+        self._create_stacked_pages()
+
+        #More specialized widgets
+        # self.setCentralWidget(self.log_output)
+        self.test_runner = TestRunner()
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
-        self.setCentralWidget(self.log_output)
-        self.test_runner = TestRunner()
 
     def _create_actions_(self):
         """Create actions for the menu bar."""
@@ -134,6 +140,182 @@ class DCTGui(QMainWindow):
         help_menu.addAction(self.tips_action)
         help_menu.addSeparator()
         help_menu.addAction(self.documentation_action)
+
+
+    def _create_stacked_pages(self):
+        """Create stacked pages for different functionalities."""
+        self.stacked_widget = QStackedWidget(self)
+
+        # Page 0: Selection Page
+        mode_selection_page = QWidget()
+        mode_selection_page.setStyleSheet("""
+            background: qlineargradient(
+                x1:0, y1:0,
+                x2:0, y2:1,
+                stop:0 #6a11cb,
+                stop:1 #2575fc
+            );
+        """)
+
+        mode_layout = QVBoxLayout()
+
+        mode_label = QLabel("Select test mode:")
+        mode_label.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: white;
+                background: transparent;
+            }
+        """)
+
+        mode_label.setAlignment(Qt.AlignCenter)
+
+        button_width = 200  # Set a fixed width for the buttons
+        button_height = 60  # Set a fixed height for the buttons
+
+        # Spacing
+        mode_layout.addStretch(1)  # Add stretchable space before the label
+        mode_layout.addWidget(mode_label)
+        mode_layout.addSpacing(20)  # Add space after the label
+
+        # Styling the logic buttons
+        logic_button = QPushButton("Logic Test")
+        logic_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        logic_button.setMinimumSize(button_width, button_height)
+        logic_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                background-color: #4CAF50; 
+                color: white;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #45A049; }
+                                   """)
+        
+        # Styling the opamp button
+        opamp_button = QPushButton("Opamp Test")
+        opamp_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        opamp_button.setMinimumSize(button_width, button_height)
+        opamp_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                background-color: #2196F3; 
+                color: white;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2; 
+            }
+            """)
+        
+        # Add the label and buttons to the layout
+        # mode_layout.addWidget(logic_button)
+        # mode_layout.addWidget(opamp_button)
+        # mode_layout.addStretch(1)  # Add stretchable space after the buttons
+
+        #Horizontal layout for buttons
+        button_row = QHBoxLayout()
+        button_row.addStretch(1)  # Add stretchable space before the buttons
+        button_row.addWidget(logic_button)
+        button_row.addSpacing(20)  # Add space between the buttons
+        button_row.addWidget(opamp_button)
+        button_row.addStretch(1)  # Add stretchable space after the buttons
+
+        mode_layout.addLayout(button_row)
+        mode_layout.addStretch(1)  # Add stretchable space after the buttons
+        mode_selection_page.setLayout(mode_layout)
+
+        # Page 1 : Logic Chip Test Page UI PlaceHolder
+        logic_chip_page = QWidget()
+        logic_layout = QGridLayout()
+        logic_layout.setSpacing(15)
+
+        # === 1. Chip Detection Card ===
+        detection_group = QGroupBox("Chip Detection")
+        detection_layout = QVBoxLayout()
+        self.detection_label = QLabel("No chip detected.")
+        detection_layout.addWidget(self.detection_label)
+        detection_group.setLayout(detection_layout)
+
+        # === 2. Truth Table Card ===
+        truth_table_group = QGroupBox("Expected Truth Table")
+        truth_layout = QVBoxLayout()
+        self.truth_table_label = QLabel("Truth table will appear here.")
+        truth_layout.addWidget(self.truth_table_label)
+        truth_table_group.setLayout(truth_layout)
+
+        # === 3. Test Controls Card ===
+        controls_group = QGroupBox("Test Controls")
+        controls_layout = QVBoxLayout()
+        self.start_test_button = QPushButton("Start Test")
+        self.stop_test_button = QPushButton("Stop Test")
+        self.reset_test_button = QPushButton("Reset Test")
+        controls_layout.addWidget(self.start_test_button)
+        controls_layout.addWidget(self.stop_test_button)
+        controls_layout.addWidget(self.reset_test_button)
+        controls_group.setLayout(controls_layout)
+
+        # === 4. Results Card ===
+        results_group = QGroupBox("Test Results & Advice")
+        results_layout = QVBoxLayout()
+        self.results_label = QLabel("Results will appear here.")
+        results_layout.addWidget(self.results_label)
+        results_group.setLayout(results_layout)
+
+        # === Back Button ===
+        logic_back_button = QPushButton("Back to Mode Selection")
+        logic_back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+
+        # Add all sections to the main vertical layout
+        # logic_layout.addWidget(detection_group)
+        # logic_layout.addWidget(truth_table_group)
+        # logic_layout.addWidget(controls_group)
+        # logic_layout.addWidget(results_group)
+        # logic_layout.addWidget(logic_back_button)
+
+        # logic_chip_page.setLayout(logic_layout)
+        logic_layout = QGridLayout()
+        logic_layout.setSpacing(15)
+
+        # Row 0
+        logic_layout.addWidget(detection_group, 0, 0)
+        logic_layout.addWidget(truth_table_group, 0, 1)
+
+        # Row 1
+        logic_layout.addWidget(controls_group, 1, 0)
+        logic_layout.addWidget(results_group, 1, 1)
+
+        # Row 2 - Back button spanning both columns
+        logic_layout.addWidget(logic_back_button, 2, 0, 1, 2)
+
+        logic_chip_page.setLayout(logic_layout)
+
+
+
+        # Page 2 : Opamp Test Page UI PlaceHolder
+        opamp_chip_page = QWidget()
+        opamp_layout = QVBoxLayout()
+        opamp_label = QLabel("Opamp Testing Interface")
+        opamp_layout.addWidget(opamp_label)
+        opamp_chip_page.setLayout(opamp_layout)
+        opamp_back_button = QPushButton("Back to Mode Selection")
+        opamp_back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        opamp_layout.addWidget(opamp_back_button)
+
+        # Add pages to the stacked widget
+        self.stacked_widget.addWidget(mode_selection_page)  # Page 0
+        self.stacked_widget.addWidget(logic_chip_page)      # Page 1
+        self.stacked_widget.addWidget(opamp_chip_page)      # Page 2
+
+        # Set the stacked widget as the central widget
+        self.setCentralWidget(self.stacked_widget)
+
+        # ==== Connect buttons to switch pages ===
+        logic_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
+        opamp_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(2))
+
 
     def open_test_file(self):
         """Open a test YAML file and display its content."""
