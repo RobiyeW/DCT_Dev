@@ -229,6 +229,42 @@ class DCTGui(QMainWindow):
 
         # Page 1 : Logic Chip Test Page UI PlaceHolder
         logic_chip_page = QWidget()
+        logic_chip_page.setObjectName("LogicPage")
+        logic_chip_page.setStyleSheet("""
+            QWidget#LogicPage {
+                background: qlineargradient(
+                    x1:0, y1:0,
+                    x2:0, y2:1,
+                    stop:0 #6a11cb,
+                    stop:1 #2575fc
+                );
+            }
+            QGroupBox {
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 16px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 4px 8px;
+                margin-top: 4px;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background: black;
+                border-radius: 4px;
+            }
+
+            QGroupBox QLabel {
+                font-size: 14px;
+                color: #333333;
+            }
+        """)
+
+
         logic_layout = QGridLayout()
         logic_layout.setSpacing(15)
 
@@ -249,9 +285,49 @@ class DCTGui(QMainWindow):
         # === 3. Test Controls Card ===
         controls_group = QGroupBox("Test Controls")
         controls_layout = QVBoxLayout()
+
         self.start_test_button = QPushButton("Start Test")
+        self.start_test_button.setFixedHeight(40)
+        self.start_test_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45A049;
+            }
+        """)
+
         self.stop_test_button = QPushButton("Stop Test")
+        self.stop_test_button.setFixedHeight(40)
+        self.stop_test_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #f44336;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+
         self.reset_test_button = QPushButton("Reset Test")
+        self.reset_test_button.setFixedHeight(40)
+        self.reset_test_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {         
+                background-color: #1976D2;
+            }
+        """)
+
         controls_layout.addWidget(self.start_test_button)
         controls_layout.addWidget(self.stop_test_button)
         controls_layout.addWidget(self.reset_test_button)
@@ -267,6 +343,18 @@ class DCTGui(QMainWindow):
         # === Back Button ===
         logic_back_button = QPushButton("Back to Mode Selection")
         logic_back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        logic_back_button.setFixedHeight(40)
+        logic_back_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #555555;
+                color: white;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+            }
+        """)
 
         # Add all sections to the main vertical layout
         # logic_layout.addWidget(detection_group)
@@ -277,7 +365,8 @@ class DCTGui(QMainWindow):
 
         # logic_chip_page.setLayout(logic_layout)
         logic_layout = QGridLayout()
-        logic_layout.setSpacing(15)
+        logic_layout.setHorizontalSpacing(20)
+        logic_layout.setVerticalSpacing(20)
 
         # Row 0
         logic_layout.addWidget(detection_group, 0, 0)
