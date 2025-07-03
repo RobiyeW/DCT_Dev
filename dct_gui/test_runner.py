@@ -1,44 +1,78 @@
-class TestRunner:
-    def __init__(self, serial_manager=None):
-        """Initialize the TestRunner.
-        Args:
-            serial_manager (SerialManager, optional): An instance of SerialManager for handling serial communication.
-                Defaults to None."""
-        
-        self.serial = serial_manager
-        self.test_definition = None
-    
-    def load_test(self, test_data):
-        """ Store the loaded YAML test data."""
-        
-        self.test_definition = test_data
-    
-    def run_test(self):
-        """
-        Simulate running the test.
-        For now, just create dummy pass/fail results.
-        Returns:
-            List of strings describing results.
-        """
-        if not self.test_definition:
-            return ["No test loaded."]
-        
-        results = []
-        truth_table = self.test_definition.get('truth_table', [])
+import serial
+import time
 
-        for i, row in enumerate(truth_table):
-            # Simulate "PASS" for all rows for now
-            inputs = row.get('inputs')
-            expected = row.get('ouput')
-            results.append(f"Test {i+1}: Inputs {inputs} => Expected {expected} => Result: PASS")
-        return results
+class TestRunner:
+    def __init__(self, port='COM3', baudrate=9600, timeout=2):
+        """
+        Initializes the TestRunner with the specified serial port, baud rate, and timeout.
+        :param port: Serial port to connect to (default is 'COM3').
+        :param baudrate: Baud rate for the serial connection (default is 9600).
+        """
+        # Initialize the serial connection parameters
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self.serial_connection = None
+
+    def connect(self):
+        """
+        Establishes a serial connection to the specified port.
+        """
+        try:
+            self.serial_connection = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                timeout=self.timeout
+            )
+            print(f"Connected to {self.port} at {self.baudrate} baud.")
+        except serial.SerialException as e:
+            print(f"Error connecting to {self.port}: {e}")
+            self.serial_connection = None
+
+    def disconnect(self):
+        """
+        Closes the serial connection if it is open.
+        """
+        if self.serial_connection and self.serial_connection.is_open:
+            self.serial_connection.close()
+            print(f"Disconnected from {self.port}.")
+        else:
+            print("No active connection to disconnect.")
     
-    def format_results(self, results):
+    def send_command(self, command):
         """
-        Format the test results for display.
-        Args:
-            results (list): List of result strings.
-        Returns:
-            str: Formatted string of results.
+        Sends a command to the connected device.
+        Over Serial connection.
+
+        :param command: Command string to send.
+        :return: Response from the device.
         """
-        return "\n".join(results)
+        if self.serial_connection and self.serial_connection.is_open:
+            try:
+                self.serial_connection.write((command.strip() + "\n").encode('utf-8'))
+                time.sleep(0.1)  # Give the Arduino time to reply
+                response = self.serial_connection.read_all().decode('utf-8').strip()
+                return response
+            except serial.SerialException as e:
+                print(f"Error sending command: {e}")
+                return None
+        else:
+            print("No active connection to send commands.")
+            return None
+    
+    def receive_response(self):
+        """
+        Receives a response from the connected device.
+        
+        :return: Response string from the device.
+        """
+        if self.serial_connection and self.serial_connection.is_open:
+            try:
+                response = self.serial_connection.read_all().decode('utf-8').strip()
+                return response
+            except serial.SerialException as e:
+                print(f"Error receiving response: {e}")
+                return None
+        else:
+            print("No active connection to receive responses.")
+            return None

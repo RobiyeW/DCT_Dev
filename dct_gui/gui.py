@@ -235,8 +235,8 @@ class DCTGui(QMainWindow):
                 background: qlineargradient(
                     x1:0, y1:0,
                     x2:0, y2:1,
-                    stop:0 #6a11cb,
-                    stop:1 #2575fc
+                    stop:0 #43cea2,
+                    stop:1 #000046
                 );
             }
             QGroupBox {
@@ -384,14 +384,172 @@ class DCTGui(QMainWindow):
 
 
         # Page 2 : Opamp Test Page UI PlaceHolder
+        # opamp_chip_page = QWidget()
+        # opamp_layout = QVBoxLayout()
+        # opamp_label = QLabel("Opamp Testing Interface")
+        # opamp_layout.addWidget(opamp_label)
+        # opamp_chip_page.setLayout(opamp_layout)
+        # opamp_back_button = QPushButton("Back to Mode Selection")
+        # opamp_back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        # opamp_layout.addWidget(opamp_back_button)
+
+        # Page 2 : Op Amp Test Page
         opamp_chip_page = QWidget()
-        opamp_layout = QVBoxLayout()
-        opamp_label = QLabel("Opamp Testing Interface")
-        opamp_layout.addWidget(opamp_label)
-        opamp_chip_page.setLayout(opamp_layout)
+        opamp_chip_page.setObjectName("OpAmpPage")
+        opamp_chip_page.setStyleSheet("""
+            QWidget#OpAmpPage {
+                background: qlineargradient(
+                    x1:0, y1:0,
+                    x2:0, y2:1,
+                    stop:0 #1CB5E0,
+                    stop:1 #000046
+                );
+            }
+            QGroupBox {
+                background-color: white;
+                border: 1px solid #cccccc;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 16px;
+            }
+            QGroupBox:title {
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 4px 8px;
+                margin-top: 4px;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background: black;
+                border-radius: 4px;
+            }
+            QGroupBox QLabel {
+                font-size: 14px;
+                color: #333333;
+            }
+        """)
+
+        opamp_layout = QGridLayout()
+        opamp_layout.setHorizontalSpacing(20)
+        opamp_layout.setVerticalSpacing(20)
+
+        # 1. Chip Detection Group
+        opamp_detection_group = QGroupBox("Chip Detection")
+        opamp_detection_layout = QVBoxLayout()
+        self.opamp_detection_label = QLabel("No op-amp detected.")
+        opamp_detection_layout.addWidget(self.opamp_detection_label)
+        opamp_detection_group.setLayout(opamp_detection_layout)
+
+        # 2. Test Controls Group
+        opamp_controls_group = QGroupBox("Test Controls")
+        opamp_controls_layout = QVBoxLayout()
+
+        self.opamp_start_button = QPushButton("Start Test")
+        self.opamp_start_button.setFixedHeight(40)
+        self.opamp_start_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45A049;
+            }
+        """)
+
+        self.opamp_stop_button = QPushButton("Stop Test")
+        self.opamp_stop_button.setFixedHeight(40)
+        self.opamp_stop_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #f44336;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+
+        self.opamp_reset_button = QPushButton("Reset Test")
+        self.opamp_reset_button.setFixedHeight(40)
+        self.opamp_reset_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+
+        opamp_controls_layout.addWidget(self.opamp_start_button)
+        opamp_controls_layout.addWidget(self.opamp_stop_button)
+        opamp_controls_layout.addWidget(self.opamp_reset_button)
+        opamp_controls_group.setLayout(opamp_controls_layout)
+
+        # 3. Waveform Display Group
+        waveform_group = QGroupBox("Waveform Display")
+        waveform_layout = QVBoxLayout()
+        self.waveform_placeholder = QLabel("Waveform graph will appear here.")
+        self.waveform_placeholder.setAlignment(Qt.AlignCenter)
+        waveform_layout.addWidget(self.waveform_placeholder)
+        waveform_group.setLayout(waveform_layout)
+
+        # 4. Health Metrics Group
+        metrics_group = QGroupBox("Health Metrics")
+        metrics_layout = QVBoxLayout()
+        self.max_voltage_label = QLabel("Max Voltage: N/A")
+        self.min_voltage_label = QLabel("Min Voltage: N/A")
+        self.avg_voltage_label = QLabel("Average Voltage: N/A")
+        metrics_layout.addWidget(self.max_voltage_label)
+        metrics_layout.addWidget(self.min_voltage_label)
+        metrics_layout.addWidget(self.avg_voltage_label)
+        metrics_group.setLayout(metrics_layout)
+
+        # 5. Results Group
+        opamp_results_group = QGroupBox("Test Results & Advice")
+        opamp_results_layout = QVBoxLayout()
+        self.opamp_results_label = QLabel("Results will appear here.")
+        opamp_results_layout.addWidget(self.opamp_results_label)
+        opamp_results_group.setLayout(opamp_results_layout)
+
+        # 6. Back Button
         opamp_back_button = QPushButton("Back to Mode Selection")
         opamp_back_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
-        opamp_layout.addWidget(opamp_back_button)
+        opamp_back_button.setFixedHeight(40)
+        opamp_back_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #555555;
+                color: white;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+            }
+        """)
+
+        # === Layout the grid ===
+        # Row 0
+        opamp_layout.addWidget(opamp_detection_group, 0, 0)
+        opamp_layout.addWidget(waveform_group, 0, 1)
+
+        # Row 1
+        opamp_layout.addWidget(opamp_controls_group, 1, 0)
+        opamp_layout.addWidget(metrics_group, 1, 1)
+
+        # Row 2
+        opamp_layout.addWidget(opamp_results_group, 2, 0, 1, 2)
+
+        # Row 3
+        opamp_layout.addWidget(opamp_back_button, 3, 0, 1, 2)
+
+        opamp_chip_page.setLayout(opamp_layout)
+
 
         # Add pages to the stacked widget
         self.stacked_widget.addWidget(mode_selection_page)  # Page 0
