@@ -13,16 +13,22 @@ class DCTGui(QMainWindow):
         super().__init__()
         self.setWindowTitle("DCT v2 GUI")
         self.resize(600, 400)
-        self._create_actions_()
-        self._create_menu_bar()
-        self._create_tools_bars()
-        self._create_stacked_pages()
 
         #More specialized widgets
         # self.setCentralWidget(self.log_output)
         self.test_runner = TestRunner()
+        self.test_runner.connect()  # Connect to the serial port
+
+        # Create a QTextEdit for log output
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
+        self.log_output.setFixedHeight(60)
+
+        # Create the main layout and widgets
+        self._create_actions_()
+        self._create_menu_bar()
+        self._create_tools_bars()
+        self._create_stacked_pages()
 
     def _create_actions_(self):
         """Create actions for the menu bar."""
@@ -557,11 +563,36 @@ class DCTGui(QMainWindow):
         self.stacked_widget.addWidget(opamp_chip_page)      # Page 2
 
         # Set the stacked widget as the central widget
-        self.setCentralWidget(self.stacked_widget)
+        # self.setCentralWidget(self.stacked_widget)
+
+        # Create a main container widget
+        central_widget = QWidget()
+        central_layout = QVBoxLayout()
+        central_widget.setLayout(central_layout)
+
+        # Add the stacked pages
+        central_layout.addWidget(self.stacked_widget)
+
+        # Add the log output below
+        central_layout.addWidget(self.log_output)
+
+        self.setCentralWidget(central_widget)
+
 
         # ==== Connect buttons to switch pages ===
         logic_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(1))
         opamp_button.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(2))
+
+        # ==== Connect test control buttons ===
+        # Logic test controls
+        self.start_test_button.clicked.connect(self.start_test)
+        self.stop_test_button.clicked.connect(self.stop_test)
+        self.reset_test_button.clicked.connect(self.reset_test)
+
+        # Op Amp test controls
+        self.opamp_start_button.clicked.connect(self.start_test)
+        self.opamp_stop_button.clicked.connect(self.stop_test)
+        self.opamp_reset_button.clicked.connect(self.reset_test)
 
 
     def open_test_file(self):
@@ -596,7 +627,83 @@ class DCTGui(QMainWindow):
         self.log_output.append(formatted)
         QMessageBox.information(self, "Test Results", formatted)
 
+    def start_test(self):
+        if not self.test_runner.is_connected():
+            QMessageBox.warning(self, "Connection Error", "Not connected to the device.")
+            return
 
+        mode_index = self.stacked_widget.currentIndex()
+        if mode_index == 1:
+            command = "start_logic"
+        elif mode_index == 2:
+            command = "start_opamp"
+        else:
+            QMessageBox.warning(self, "Error", "Unknown mode selected.")
+            return
+
+        self.log_output.append(f"Starting test ({command})...")
+        try:
+            print("Sending command to Arduino...")
+            response = self.test_runner.send_command(command)
+            print("Command sent.")
+        except Exception as e:
+            print("Exception occurred in send_command:", e)
+            QMessageBox.critical(self, "Error", f"Exception occurred:\n{e}")
+            return
+
+        if response:
+            self.log_output.append(f"Response: {response}")
+        else:
+            self.log_output.append("Failed to start test. Error in communication.")
+
+    
+    def stop_test(self):
+        """Handler for stopping the test."""
+        if not self.test_runner.is_connected():
+            QMessageBox.warning(self, "Connection Error", "Not connected to the device.")
+            return
+
+        mode_index = self.stacked_widget.currentIndex()
+        if mode_index == 1:
+            command = "stop_logic"
+        elif mode_index == 2:
+            command = "stop_opamp"
+        else:
+            QMessageBox.warning(self, "Error", "Unknown mode selected.")
+            return
+
+        self.log_output.append(f"Stopping test ({command})...")
+        response = self.test_runner.send_command(command)
+
+        if response:
+            self.log_output.append(f"Response: {response}")
+        else:
+            self.log_output.append("Failed to stop test. Error in communication.")
+    
+    def reset_test(self):
+        """Handler for resetting the test."""
+        if not self.test_runner.is_connected():
+            QMessageBox.warning(self, "Connection Error", "Not connected to the device.")
+            return
+
+        mode_index = self.stacked_widget.currentIndex()
+        if mode_index == 1:
+            command = "reset_logic"
+        elif mode_index == 2:
+            command = "reset_opamp"
+        else:
+            QMessageBox.warning(self, "Error", "Unknown mode selected.")
+            return
+
+        self.log_output.append(f"Resetting test ({command})...")
+        response = self.test_runner.send_command(command)
+
+        if response:
+            self.log_output.append(f"Response: {response}")
+        else:
+            self.log_output.append("Failed to reset test. Error in communication.")
+
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     gui = DCTGui()

@@ -1,5 +1,11 @@
 import serial
 import time
+from serial import SerialException, SerialTimeoutException
+
+"""
+This module provides a TestRunner class for managing serial communication with a device.
+It allows connecting to a serial port, sending commands, receiving responses, and closing the connection.
+"""
 
 class TestRunner:
     def __init__(self, port='COM3', baudrate=9600, timeout=2):
@@ -22,7 +28,8 @@ class TestRunner:
             self.serial_connection = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
-                timeout=self.timeout
+                timeout=self.timeout,
+                write_timeout=0.2
             )
             self.serial_connection.flushInput()
             print(f"Connected to {self.port} at {self.baudrate} baud.")
@@ -56,12 +63,23 @@ class TestRunner:
         :return: Response from the device.
         """
         if self.serial_connection and self.serial_connection.is_open:
+            print("Sending...")
             try:
                 self.serial_connection.write((command.strip() + "\n").encode('utf-8'))
-                time.sleep(0.1)  # Give the Arduino time to reply
-                response = self.serial_connection.read_all().decode('utf-8').strip()
-                return response
-            except serial.SerialException as e:
+                print("Written.")
+                time.sleep(0.1)
+                print("Checking if any bytes waiting...")
+                if self.serial_connection.in_waiting:
+                    print("Bytes waiting.")
+                    response = self.serial_connection.read(self.serial_connection.in_waiting).decode('utf-8').strip()
+                    return response
+                else:
+                    print("No bytes waiting, returning (no response).")
+                    return "(no response)"
+            except SerialTimeoutException as e:
+                print(f"Write timed out: {e}")
+                return None
+            except SerialException as e:
                 print(f"Error sending command: {e}")
                 return None
         else:
