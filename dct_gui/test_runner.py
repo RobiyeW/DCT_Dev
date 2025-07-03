@@ -24,21 +24,29 @@ class TestRunner:
                 baudrate=self.baudrate,
                 timeout=self.timeout
             )
+            self.serial_connection.flushInput()
             print(f"Connected to {self.port} at {self.baudrate} baud.")
         except serial.SerialException as e:
             print(f"Error connecting to {self.port}: {e}")
             self.serial_connection = None
 
-    def disconnect(self):
+    def is_connected(self):
         """
-        Closes the serial connection if it is open.
+        Checks if the serial connection is open.
+        
+        :return: True if connected, False otherwise.
         """
-        if self.serial_connection and self.serial_connection.is_open:
-            self.serial_connection.close()
-            print(f"Disconnected from {self.port}.")
-        else:
-            print("No active connection to disconnect.")
+        return self.serial_connection is not None and self.serial_connection.is_open
     
+    def __del__(self):
+        """
+        Destructor to ensure the serial connection is closed when the object is deleted.
+        """
+        try:
+            self.close_connection()
+        except Exception:
+            pass  # Avoid exceptions during garbage collection
+            
     def send_command(self, command):
         """
         Sends a command to the connected device.
@@ -60,19 +68,39 @@ class TestRunner:
             print("No active connection to send commands.")
             return None
     
-    def receive_response(self):
+    def receive_response(self, timeout=2):
         """
         Receives a response from the connected device.
         
         :return: Response string from the device.
         """
         if self.serial_connection and self.serial_connection.is_open:
+            start_time = time.time()
+            response = ""
             try:
-                response = self.serial_connection.read_all().decode('utf-8').strip()
-                return response
+                while time.time() - start_time < timeout:
+                    if self.serial_connection.in_waiting > 0:
+                        # Read all available bytes
+                        response += self.serial_connection.read_all().decode('utf-8')
+                    time.sleep(0.1)
+                return response.strip()
             except serial.SerialException as e:
                 print(f"Error receiving response: {e}")
                 return None
         else:
             print("No active connection to receive responses.")
             return None
+    
+    def close_connection(self):
+        """
+        Closes the serial connection if it is open.
+        """
+
+        if self.serial_connection and self.serial_connection.is_open:
+            try:
+                self.serial_connection.close()
+                print(f"Connection to {self.port} closed.")
+            except serial.SerialException as e:
+                print(f"Error while closing connection: {e}")
+        else:
+            print("No active connection to close.")
