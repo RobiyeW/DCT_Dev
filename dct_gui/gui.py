@@ -6,6 +6,7 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 from yaml_loader import load_yaml_test
 from test_runner import TestRunner
+from datetime import datetime
 import sys
 
 class DCTGui(QMainWindow):
@@ -641,7 +642,9 @@ class DCTGui(QMainWindow):
             QMessageBox.warning(self, "Error", "Unknown mode selected.")
             return
 
-        self.log_output.append(f"Starting test ({command})...")
+        timestamp = datetime.now().strftime("[%H:%M:%S]")
+        self.log_output.append(f"{timestamp} Starting test ({command})...")
+
         try:
             print("Sending command to Arduino...")
             response = self.test_runner.send_command(command)
@@ -652,10 +655,11 @@ class DCTGui(QMainWindow):
             return
 
         if response:
-            self.log_output.append(f"Response: {response}")
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            self.log_output.append(f"{timestamp} Response: {response}")
         else:
-            self.log_output.append("Failed to start test. Error in communication.")
-
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+        self.log_output.append(f"{timestamp} Failed to start test. Error in communication.")
     
     def stop_test(self):
         """Handler for stopping the test."""
@@ -672,13 +676,24 @@ class DCTGui(QMainWindow):
             QMessageBox.warning(self, "Error", "Unknown mode selected.")
             return
 
-        self.log_output.append(f"Stopping test ({command})...")
-        response = self.test_runner.send_command(command)
+        timestamp = datetime.now().strftime("[%H:%M:%S]")
+        self.log_output.append(f"{timestamp} Starting test ({command})...")
+
+        try:
+            print("Sending command to Arduino...")
+            response = self.test_runner.send_command(command)
+            print("Command sent.")
+        except Exception as e:
+            print("Exception occurred in send_command:", e)
+            QMessageBox.critical(self, "Error", f"Exception occurred:\n{e}")
+            return
 
         if response:
-            self.log_output.append(f"Response: {response}")
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            self.log_output.append(f"{timestamp} Response: {response}")
         else:
-            self.log_output.append("Failed to stop test. Error in communication.")
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            self.log_output.append(f"{timestamp} Failed to start test. Error in communication.")
     
     def reset_test(self):
         """Handler for resetting the test."""
@@ -695,14 +710,25 @@ class DCTGui(QMainWindow):
             QMessageBox.warning(self, "Error", "Unknown mode selected.")
             return
 
-        self.log_output.append(f"Resetting test ({command})...")
-        response = self.test_runner.send_command(command)
+        timestamp = datetime.now().strftime("[%H:%M:%S]")
+        self.log_output.append(f"{timestamp} Starting test ({command})...")
+
+        try:
+            print("Sending command to Arduino...")
+            response = self.test_runner.send_command(command)
+            print("Command sent.")
+        except Exception as e:
+            print("Exception occurred in send_command:", e)
+            QMessageBox.critical(self, "Error", f"Exception occurred:\n{e}")
+            return
 
         if response:
-            self.log_output.append(f"Response: {response}")
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            self.log_output.append(f"{timestamp} Response: {response}")
         else:
-            self.log_output.append("Failed to reset test. Error in communication.")
-
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            self.log_output.append(f"{timestamp} Failed to start test. Error in communication.")
+            
     
 if __name__ == "__main__":
     app = QApplication(sys.argv)
