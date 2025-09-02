@@ -1,124 +1,142 @@
-import serial
+# test_runner.py
 import time
+import serial
 from serial import SerialException, SerialTimeoutException
+from serial.tools import list_ports
 
-"""
-This module provides a TestRunner class for managing serial communication with a device.
-It allows connecting to a serial port, sending commands, receiving responses, and closing the connection.
-"""
 
 class TestRunner:
-    def __init__(self, port='COM3', baudrate=9600, timeout=2):
+    """
+    Manage serial comms with the DCT MCU.
+
+    Key behaviors for GUI use:
+      - available_ports(): enumerate ports for a dropdown
+      - connect(port, baudrate): open with a short read timeout for smooth polling
+      - send_command(cmd): appends '\n' if missing
+      - receive_response(): RETURN ONE LINE or None (non-blocking-ish, obeys short timeout)
+      - close_connection(): safe teardown
+    """
+
+    def __init__(self, port='COM3', baudrate=9600, timeout=0.05):
         """
-        Initializes the TestRunner with the specified serial port, baud rate, and timeout.
-        :param port: Serial port to connect to (default is 'COM3').
-        :param baudrate: Baud rate for the serial connection (default is 9600).
+        :param port: default serial port (string)
+        :param baudrate: default baud (int)
+        :param timeout: read timeout in seconds (keep small for GUI polling)
         """
-        # Initialize the serial connection parameters
         self.port = port
         self.baudrate = baudrate
-        self.timeout = timeout
-        self.serial_connection = None
+        self.timeout = timeout  # keep small (e.g., 0.02–0.1) so GUI stays responsive
+        self.ser = None
 
-    def connect(self):
+    # ---------- Port discovery ----------
+    @staticmethod
+    def available_ports():
         """
-        Establishes a serial connection to the specified port.
+        Returns: list[(device, description)] e.g. [("COM4", "Arduino Uno"), ...]
         """
+        out = []
         try:
-            self.serial_connection = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=self.timeout,
-                write_timeout=0.2
+            for p in list_ports.comports():
+                out.append((p.device, p.description or ""))
+        except Exception:
+            pass
+        return out
+
+    # ---------- Connection control ----------
+    def connect(self, port=None, baudrate=None, timeout=None):
+        """
+        Open the serial port with given settings (overrides the defaults if provided).
+        """
+        if port is not None:
+            self.port = port
+        if baudrate is not None:
+            self.baudrate = baudrate
+        if timeout is not None:
+            self.timeout = timeout
+
+        self.close_connection()
+        try:
+            self.ser = serial.Serial(
+                self.port,
+                self.baudrate,
+                timeout=self.timeout,       # short read timeout for polling
+                write_timeout=0.25,         # short write timeout
+                exclusive=True              # prevent multiple opens where supported
             )
-            self.serial_connection.flushInput()
-            print(f"Connected to {self.port} at {self.baudrate} baud.")
-        except serial.SerialException as e:
-            print(f"Error connecting to {self.port}: {e}")
-            self.serial_connection = None
+            # Give the MCU a moment to settle after opening the port.
+            time.sleep(0.2)
+            # Clear any stale bytes
+            try:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            self.ser = None
+            # Let caller surface this in the GUI
+            raise
 
     def is_connected(self):
-        """
-        Checks if the serial connection is open.
-        
-        :return: True if connected, False otherwise.
-        """
-        return self.serial_connection is not None and self.serial_connection.is_open
-    
+        return (self.ser is not None) and self.ser.is_open
+
     def __del__(self):
-        """
-        Destructor to ensure the serial connection is closed when the object is deleted.
-        """
         try:
             self.close_connection()
         except Exception:
-            pass  # Avoid exceptions during garbage collection
-            
-    def send_command(self, command):
-        """
-        Sends a command to the connected device.
-        Over Serial connection.
+            pass  # best-effort during GC
 
-        :param command: Command string to send.
-        :return: Response from the device.
-        """
-        if self.serial_connection and self.serial_connection.is_open:
-            print("Sending...")
-            try:
-                self.serial_connection.write((command.strip() + "\n").encode('utf-8'))
-                print("Written.")
-                time.sleep(0.1)
-                print("Checking if any bytes waiting...")
-                if self.serial_connection.in_waiting:
-                    print("Bytes waiting.")
-                    response = self.serial_connection.read(self.serial_connection.in_waiting).decode('utf-8').strip()
-                    return response
-                else:
-                    print("No bytes waiting, returning (no response).")
-                    return "(no response)"
-            except SerialTimeoutException as e:
-                print(f"Write timed out: {e}")
-                return None
-            except SerialException as e:
-                print(f"Error sending command: {e}")
-                return None
-        else:
-            print("No active connection to send commands.")
-            return None
-    
-    def receive_response(self, timeout=2):
-        """
-        Receives a response from the connected device.
-        
-        :return: Response string from the device.
-        """
-        if self.serial_connection and self.serial_connection.is_open:
-            start_time = time.time()
-            response = ""
-            try:
-                while time.time() - start_time < timeout:
-                    if self.serial_connection.in_waiting > 0:
-                        # Read all available bytes
-                        response += self.serial_connection.read_all().decode('utf-8')
-                    time.sleep(0.1)
-                return response.strip()
-            except serial.SerialException as e:
-                print(f"Error receiving response: {e}")
-                return None
-        else:
-            print("No active connection to receive responses.")
-            return None
-    
     def close_connection(self):
-        """
-        Closes the serial connection if it is open.
-        """
-
-        if self.serial_connection and self.serial_connection.is_open:
+        if self.ser:
             try:
-                self.serial_connection.close()
-                print(f"Connection to {self.port} closed.")
-            except serial.SerialException as e:
-                print(f"Error while closing connection: {e}")
-        else:
-            print("No active connection to close.")
+                if self.ser.is_open:
+                    self.ser.close()
+            except Exception:
+                pass
+        self.ser = None
+
+    # ---------- I/O ----------
+    def send_command(self, command: str) -> bool:
+        """
+        Send a single-line command. A trailing newline is appended if missing.
+
+        Returns True on success, False on failure.
+        """
+        if not self.is_connected():
+            return False
+        try:
+            line = command if command.endswith("\n") else (command + "\n")
+            self.ser.write(line.encode("utf-8"))
+            self.ser.flush()
+            return True
+        except (SerialTimeoutException, SerialException, OSError):
+            return False
+
+    def receive_response(self):
+        """
+        Non-blocking-ish: return ONE complete line (without trailing CR/LF) or None.
+        Uses the serial port's timeout; keep it small for smooth GUI polling.
+        """
+        if not self.is_connected():
+            return None
+        try:
+            raw = self.ser.readline()  # reads up to '\n' or until timeout
+            if not raw:
+                return None
+            # Normalize line endings and decode safely
+            return raw.decode("utf-8", errors="ignore").rstrip("\r\n")
+        except (SerialException, OSError, UnicodeDecodeError):
+            return None
+
+    # Optional helper if you want to drain multiple lines in one tick
+    def receive_lines(self, max_lines: int = 50):
+        """
+        Read up to max_lines lines quickly. Returns list[str].
+        """
+        lines = []
+        for _ in range(max_lines):
+            line = self.receive_response()
+            if not line:
+                break
+            lines.append(line)
+        return lines
