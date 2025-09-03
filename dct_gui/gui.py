@@ -38,6 +38,8 @@ class DCTGui(QMainWindow):
         self.current_test_kind = "nand"
         # flag set when a test definition has been pushed to the MCU
         self.loaded_test_available = False
+        # track which page initiated the last 'detect' request: 'logic' or 'opamp'
+        self._last_detect_target = None
 
         # Create the main layout and widgets
         self._create_actions_()
@@ -628,6 +630,8 @@ class DCTGui(QMainWindow):
         self.opamp_start_button.clicked.connect(self._on_opamp_start)
         self.opamp_stop_button.clicked.connect(self._on_stop)
         self.opamp_reset_button.clicked.connect(self._on_reset)
+        # op-amp page detect should call detect_opamp (doesn't alter logic tables)
+        self.opamp_detect_button.clicked.connect(self.detect_opamp)
 
         # (selector removed — GUI is auto-driven by detection)
 
@@ -695,6 +699,8 @@ class DCTGui(QMainWindow):
 
             # Prime panels
             self.test_runner.send_command("status")
+            # the connect-time detect should target the logic page
+            self._last_detect_target = "logic"
             self.test_runner.send_command("detect")
 
             # Default to NAND on connect (GUI state + MCU)
@@ -790,13 +796,24 @@ class DCTGui(QMainWindow):
 
             elif evt == "detect":
                 chip = data.get("chip", "UNKNOWN")
-                self.detection_label.setText(chip)
-                self.opamp_detection_label.setText(chip)  # fine if UNKNOWN for op-amp
+                target = getattr(self, "_last_detect_target", None)
 
-                # NEW: auto-select the matching test and prep the tables
-                self._apply_detected_chip(chip)
+                # Update only the page that initiated the detect.
+                if target == "opamp":
+                    if hasattr(self, "opamp_detection_label"):
+                        self.opamp_detection_label.setText(chip)
+                else:  # default/logic target
+                    if hasattr(self, "detection_label"):
+                        self.detection_label.setText(chip)
+                    # only apply selection/patch tables when logic requested the detect
+                    try:
+                        self._apply_detected_chip(chip)
+                    except Exception:
+                        pass
 
-                self._log(f"[DETECT] {chip}")
+                # clear the last-detect target after handling
+                self._last_detect_target = None
+                self._log(f"[DETECT] {chip} (from {target})")
 
 
             elif evt == "vector":
@@ -1116,8 +1133,23 @@ class DCTGui(QMainWindow):
             return
         timestamp = datetime.now().strftime("[%H:%M:%S]")
         self.log_output.append(f"{timestamp} → detect")
+        # mark that this detect was requested by the logic page
+        self._last_detect_target = "logic"
         self.test_runner.send_command("detect")
-        self.detection_label.setText("Detecting...")
+        if hasattr(self, "detection_label"):
+            self.detection_label.setText("Detecting...")
+
+    def detect_opamp(self):
+        """Request detection for the op-amp page only (won't change logic tables)."""
+        if not self.test_runner.is_connected():
+            QMessageBox.warning(self, "Connection Error", "Not connected to the device.")
+            return
+        timestamp = datetime.now().strftime("[%H:%M:%S]")
+        self.log_output.append(f"{timestamp} → detect (opamp)")
+        self._last_detect_target = "opamp"
+        self.test_runner.send_command("detect")
+        if hasattr(self, "opamp_detection_label"):
+            self.opamp_detection_label.setText("Detecting...")
 
     # ---------- Existing file/test helpers ----------
     def open_test_file(self):
