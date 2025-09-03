@@ -294,7 +294,7 @@ class DCTGui(QMainWindow):
         logic_layout.setRowStretch(0, 0)
         logic_layout.setRowStretch(1, 0)
         logic_layout.setRowStretch(2, 0)
-        logic_layout.setRowStretch(3, 1)
+        # logic_layout.setRowStretch(3, 1)
 
         # # === 1. Chip Detection Card ===
         # detection_group = QGroupBox("Chip Detection")
