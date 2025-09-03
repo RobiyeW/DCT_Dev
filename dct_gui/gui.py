@@ -4,9 +4,9 @@ import json
 import re
 from datetime import datetime
 from typing import Optional, Union  # <-- for Python < 3.10
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QPainter, QColor, QPen, QPolygonF
 from test_runner import TestRunner
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QPointF
 from yaml_loader import load_yaml_test
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QMenuBar, QAction, QFileDialog, QMessageBox, QTextEdit,
@@ -34,6 +34,10 @@ class DCTGui(QMainWindow):
             ("NAND Test",     "select_nand",     "start_nand"),
             ("Inverter Test", "select_inverter", "start_inverter"),
         ]
+        # source-of-truth for current test kind: "nand" or "inv"
+        self.current_test_kind = "nand"
+        # flag set when a test definition has been pushed to the MCU
+        self.loaded_test_available = False
 
         # Create the main layout and widgets
         self._create_actions_()
@@ -290,12 +294,33 @@ class DCTGui(QMainWindow):
         logic_layout.setRowStretch(2, 0)
         logic_layout.setRowStretch(3, 1)
 
-        # === 1. Chip Detection Card ===
-        detection_group = QGroupBox("Chip Detection")
-        detection_layout = QVBoxLayout()
+        # # === 1. Chip Detection Card ===
+        # detection_group = QGroupBox("Chip Detection")
+        # detection_layout = QVBoxLayout()
+        # self.detection_label = QLabel("No chip detected.")
+        # detection_layout.addWidget(self.detection_label)
+        # detection_group.setLayout(detection_layout)
+
+        # === 1+2. Chip & Test Card (combined) ===
+        chip_group = QGroupBox("Chip & Test")
+        chip_layout = QVBoxLayout()
+
+        # detection text
         self.detection_label = QLabel("No chip detected.")
-        detection_layout.addWidget(self.detection_label)
-        detection_group.setLayout(detection_layout)
+        self.detection_label.setWordWrap(True)
+        chip_layout.addWidget(self.detection_label)
+
+        # small spacer
+        sp = QWidget(); sp.setFixedHeight(6)
+        chip_layout.addWidget(sp)
+
+        # readonly current-test indicator (auto-driven by detection)
+        self.logic_test_label = QLabel("Current test: NAND")
+        self.logic_test_label.setStyleSheet("font-weight: bold;")
+        chip_layout.addWidget(self.logic_test_label)
+
+        chip_group.setLayout(chip_layout)
+
 
         # === 2. Truth Table Card ===
         truth_table_group = QGroupBox("Expected Truth Table")
@@ -322,15 +347,15 @@ class DCTGui(QMainWindow):
         truth_table_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         truth_table_group.setMaximumHeight(230)
 
-        # === 2b. Logic Test Selector ===
-        selector_group = QGroupBox("Logic Test")
-        selector_layout = QVBoxLayout()
-        self.logic_selector = QComboBox()
-        for label, _, _ in self.logic_tests:
-            self.logic_selector.addItem(label)
-        selector_layout.addWidget(QLabel("Choose test:"))
-        selector_layout.addWidget(self.logic_selector)
-        selector_group.setLayout(selector_layout)
+        # # === 2b. Logic Test Selector ===
+        # selector_group = QGroupBox("Logic Test")
+        # selector_layout = QVBoxLayout()
+        # self.logic_selector = QComboBox()
+        # for label, _, _ in self.logic_tests:
+        #     self.logic_selector.addItem(label)
+        # selector_layout.addWidget(QLabel("Choose test:"))
+        # selector_layout.addWidget(self.logic_selector)
+        # selector_group.setLayout(selector_layout)
 
         # === 3. Test Controls Card ===
         controls_group = QGroupBox("Test Controls")
@@ -414,14 +439,25 @@ class DCTGui(QMainWindow):
             QPushButton:hover { background-color: #333333; }
         """)
 
-        # Layout grid
-        logic_layout.addWidget(detection_group, 0, 0)
-        logic_layout.addWidget(truth_table_group, 0, 1)
-        logic_layout.addWidget(selector_group, 1, 0)
-        logic_layout.addWidget(results_group, 1, 1)
-        logic_layout.addWidget(controls_group, 2, 0)
-        logic_layout.addWidget(logic_back_button, 3, 0, 1, 2)
+        # Layout grid  (4 cards total)
+        logic_layout.addWidget(chip_group,        0, 0)   # combined Chip & Test (left)
+        logic_layout.addWidget(truth_table_group, 0, 1)   # Expected Truth Table (right)
+
+        logic_layout.addWidget(controls_group,    1, 0)   # Test Controls (left)
+        logic_layout.addWidget(results_group,     1, 1)   # Results table (right)
+
+        # Back button spans both columns
+        logic_layout.addWidget(logic_back_button, 2, 0, 1, 2)
+
         logic_chip_page.setLayout(logic_layout)
+
+        logic_layout.setColumnStretch(0, 1)
+        logic_layout.setColumnStretch(1, 3)
+        logic_layout.setRowStretch(0, 0)
+        logic_layout.setRowStretch(1, 1)
+        logic_layout.setRowStretch(2, 0)
+
+
 
         # Page 2 : Op Amp Test Page  (unchanged except formatting)
         opamp_chip_page = QWidget()
@@ -505,16 +541,38 @@ class DCTGui(QMainWindow):
             QPushButton:hover { background-color: #1976D2; }
         """)
 
+        # Detect for opamp page (does not modify logic truth tables)
+        self.opamp_detect_button = QPushButton("Detect Chip")
+        self.opamp_detect_button.setFixedHeight(40)
+        self.opamp_detect_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #FF9800;
+                color: white;
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #FB8C00; }
+        """)
+
         opamp_controls_layout.addWidget(self.opamp_start_button)
         opamp_controls_layout.addWidget(self.opamp_stop_button)
         opamp_controls_layout.addWidget(self.opamp_reset_button)
+        opamp_controls_layout.addWidget(self.opamp_detect_button)
         opamp_controls_group.setLayout(opamp_controls_layout)
 
         waveform_group = QGroupBox("Waveform Display")
         waveform_layout = QVBoxLayout()
-        self.waveform_placeholder = QLabel("Waveform graph will appear here.")
-        self.waveform_placeholder.setAlignment(Qt.AlignCenter)
-        waveform_layout.addWidget(self.waveform_placeholder)
+        # NEW: actual plot
+        self.waveform = WaveformWidget(max_points=320)
+        self.waveform.set_range(0.0, 5.0)  # adjust if your board is 3.3V
+        waveform_layout.addWidget(self.waveform)
+
+        # Keep your live numeric readout
+        self.pwm_readout_label = QLabel("Duty: —    Voltage: — V")
+        self.pwm_readout_label.setAlignment(Qt.AlignCenter)
+        f = self.pwm_readout_label.font(); f.setPointSize(14); f.setBold(True)
+        self.pwm_readout_label.setFont(f)
+        waveform_layout.addWidget(self.pwm_readout_label)
         waveform_group.setLayout(waveform_layout)
 
         metrics_group = QGroupBox("Health Metrics")
@@ -571,8 +629,7 @@ class DCTGui(QMainWindow):
         self.opamp_stop_button.clicked.connect(self._on_stop)
         self.opamp_reset_button.clicked.connect(self._on_reset)
 
-        # Logic selector signal
-        self.logic_selector.currentIndexChanged.connect(self._on_logic_selection_changed)
+        # (selector removed — GUI is auto-driven by detection)
 
         # Initialize both tables to NAND by default
         self._fill_truth_table_nand()
@@ -640,11 +697,9 @@ class DCTGui(QMainWindow):
             self.test_runner.send_command("status")
             self.test_runner.send_command("detect")
 
-            # Default logic selection → NAND
-            self.logic_selector.blockSignals(True)
-            self.logic_selector.setCurrentIndex(0)
-            self.logic_selector.blockSignals(False)
-            self.test_runner.send_command("select_nand")
+            # Default to NAND on connect (GUI state + MCU)
+            self._set_current_test_kind("nand")
+            self._send("select_nand")
         except Exception as e:
             QMessageBox.warning(self, "Serial", f"Connection failed:\n{e}")
 
@@ -664,12 +719,20 @@ class DCTGui(QMainWindow):
             pass
 
     def _on_logic_start(self):
-        idx = self.logic_selector.currentIndex()
-        _, _, start_cmd = self.logic_tests[idx]
         self._clear_results_y()   # blank previous results
-        self._send(start_cmd)
+        if getattr(self, "loaded_test_available", False):
+            # run the test definition previously uploaded to the MCU
+            self._send("start_loaded")
+        else:
+            # fallback to built-in tests (back-compat)
+            start_cmd = "start_nand" if self._current_kind() == "nand" else "start_inverter"
+            self._send(start_cmd)
 
     def _on_opamp_start(self):
+        self._reset_opamp_stats()
+        # ensure the waveform is cleared right before the run
+        if hasattr(self, "waveform"):
+            self.waveform.clear()
         self._send("start_opamp")
 
     def _on_stop(self):
@@ -685,6 +748,22 @@ class DCTGui(QMainWindow):
         ok = self.test_runner.send_command(cmd)
         ts = datetime.now().strftime("[%H:%M:%S]")  # <-- fixed closing bracket
         self.log_output.append(f"{ts} → {cmd}" if ok else f"{ts} [ERR] failed to send: {cmd}")
+
+    def _send_test_definition(self, data: dict):
+        """Normalize a loaded YAML test into MCU JSON and send it."""
+        msg = {
+            "cmd": "define_test",
+            "mode": data.get("mode", "truth_table"),
+            "chip": data.get("chip"),
+            "name": data.get("name"),
+            "pins": data.get("pins", {}),
+            "rows": data.get("rows", []),
+            "settle_ms": int(data.get("settle_ms", 5)),
+        }
+        # send as a single JSON command string
+        self.test_runner.send_command(json.dumps(msg))
+        # mark that Start should use the loaded test
+        self.loaded_test_available = True
 
     # ---------- Serial polling & routing ----------
     def _drain_serial(self):
@@ -703,28 +782,22 @@ class DCTGui(QMainWindow):
             evt = data.get("event")
             if evt == "status":
                 m = data.get("menuIndex")
-                if isinstance(m, int):
-                    if m in (0, 1) and self.logic_selector.currentIndex() != m:
-                        self.logic_selector.blockSignals(True)
-                        self.logic_selector.setCurrentIndex(m)
-                        self.logic_selector.blockSignals(False)
+                if isinstance(m, int) and m in (0, 1):
+                    self._set_current_test_kind("nand" if m == 0 else "inv")
+                    # self.logic_selector.blockSignals(True)
+                    # self.logic_selector.setCurrentIndex(m)
+                    # self.logic_selector.blockSignals(False)
 
             elif evt == "detect":
                 chip = data.get("chip", "UNKNOWN")
                 self.detection_label.setText(chip)
-                self.opamp_detection_label.setText(chip)
+                self.opamp_detection_label.setText(chip)  # fine if UNKNOWN for op-amp
 
-                up = (chip or "UNKNOWN").upper()
-                if "74F00" in up:
-                    self._fill_truth_table_nand()
-                    self._setup_results_table_nand()
-                elif "74F04" in up:
-                    self._fill_truth_table_inv()
-                    self._setup_results_table_inv()
-                else:
-                    self._clear_truth_tables()
+                # NEW: auto-select the matching test and prep the tables
+                self._apply_detected_chip(chip)
 
                 self._log(f"[DETECT] {chip}")
+
 
             elif evt == "vector":
                 # Live update a single row in the Results table (quick path)
@@ -806,11 +879,40 @@ class DCTGui(QMainWindow):
             elif evt == "health":
                 vmin = data.get("min_v", None)
                 vmax = data.get("max_v", None)
+                vavg = data.get("avg_v", None)
                 if vmin is not None:
-                    self.min_voltage_label.setText(f"Min Voltage: {vmin:.2f} V")
+                    self.min_voltage_label.setText(f"Min Voltage: {float(vmin):.2f} V")
                 if vmax is not None:
-                    self.max_voltage_label.setText(f"Max Voltage: {vmax:.2f} V")
-                self._log(f"[HEALTH] min={vmin:.2f}V max={vmax:.2f}V")
+                    self.max_voltage_label.setText(f"Max Voltage: {float(vmax):.2f} V")
+                if vavg is not None:
+                    self.avg_voltage_label.setText(f"Average Voltage: {float(vavg):.2f} V")
+                self._log(f"[HEALTH] min={vmin}V max={vmax}V avg={vavg}")
+
+            elif evt == "pwm":
+                # Live PWM sample: update readout, plot and running stats
+                duty = data.get("duty")
+                v = data.get("voltage")
+                if duty is not None and v is not None:
+                    try:
+                        duty_i = int(duty)
+                        v_f = float(v)
+                        # live readout
+                        if hasattr(self, "pwm_readout_label"):
+                            self.pwm_readout_label.setText(f"Duty: {duty_i:3d}    Voltage: {v_f:.2f} V")
+                        # plot
+                        if hasattr(self, "waveform"):
+                            self.waveform.append(v_f)
+                        # stats
+                        self._opamp_count += 1
+                        self._opamp_sum += v_f
+                        self._opamp_min = v_f if self._opamp_min is None else min(self._opamp_min, v_f)
+                        self._opamp_max = v_f if self._opamp_max is None else max(self._opamp_max, v_f)
+                        self.min_voltage_label.setText(f"Min Voltage: {self._opamp_min:.2f} V")
+                        self.max_voltage_label.setText(f"Max Voltage: {self._opamp_max:.2f} V")
+                        avg = self._opamp_sum / max(self._opamp_count, 1)
+                        self.avg_voltage_label.setText(f"Average Voltage: {avg:.2f} V")
+                    except Exception:
+                        pass
             else:
                 self._log(line)
             return
@@ -892,7 +994,7 @@ class DCTGui(QMainWindow):
         self.results_table.setColumnCount(0)
 
     def _current_kind(self) -> str:
-        return 'nand' if self.logic_selector.currentIndex() == 0 else 'inv'
+        return getattr(self, "current_test_kind", "nand")
 
     def _row_index_for_inputs(self, a: int, b: Optional[int] = None) -> Optional[int]:
         if self._current_kind() == 'nand':
@@ -915,6 +1017,43 @@ class DCTGui(QMainWindow):
         else:
             for r in range(2):
                 self.results_table.setItem(r, 1, self._make_center_item(""))
+
+    def _set_current_test_kind(self, kind: str) -> None:
+        """Set internal test kind and update the readonly label."""
+        self.current_test_kind = "nand" if str(kind).lower() in ("nand", "74f00", "0") else "inv"
+        pretty = "NAND Test" if self.current_test_kind == "nand" else "Inverter Test"
+        if hasattr(self, "logic_test_label"):
+            self.logic_test_label.setText(f"Current test: {pretty}")
+
+    def _apply_detected_chip(self, chip: str) -> None:
+        """
+        Align GUI + MCU to the detected chip:
+        - set combo box (without firing signals)
+        - send MCU select command
+        - show the matching truth tables
+        - clear the Results Y column
+        """
+        up = (chip or "").upper()
+
+        if "74F00" in up:
+            self._set_current_test_kind("nand")
+            self._fill_truth_table_nand()
+            self._setup_results_table_nand()
+            self._send("select_nand")
+        elif "74F04" in up:
+            self._set_current_test_kind("inv")
+            self._fill_truth_table_inv()
+            self._setup_results_table_inv()
+            self._send("select_inverter")
+        else:
+            self._clear_truth_tables()
+            return
+
+        # Fresh run → blank Y column in the Results table
+        self._clear_results_y()
+
+        # (Optional) auto-start the test:
+        # self._send("start_nand" if self.current_test_kind == "nand" else "start_inverter")
 
     def _set_results_y(self, a: int, b: Optional[int], y: Union[int, str]) -> None:
         idx = self._row_index_for_inputs(a, b)
@@ -955,6 +1094,21 @@ class DCTGui(QMainWindow):
 
         return False
 
+    def _reset_opamp_stats(self):
+        """Reset running stats and UI readouts for op-amp (PWM) live data."""
+        self._opamp_count = 0
+        self._opamp_sum = 0.0
+        self._opamp_min = None
+        self._opamp_max = None
+        if hasattr(self, "pwm_readout_label"):
+            self.pwm_readout_label.setText("Duty: —    Voltage: — V")
+        self.min_voltage_label.setText("Min Voltage: N/A")
+        self.max_voltage_label.setText("Max Voltage: N/A")
+        self.avg_voltage_label.setText("Average Voltage: N/A")
+        # clear the plot too (if present)
+        if hasattr(self, "waveform"):
+            self.waveform.clear()
+
     # ---------- Detect chip slot ----------
     def detect_chip(self):
         if not self.test_runner.is_connected():
@@ -992,6 +1146,13 @@ class DCTGui(QMainWindow):
                     for row in data.get('truth_table', []):
                         formatted += f"  IN: {row.get('inputs')} → OUT: {row.get('output')}\n"
                     QMessageBox.information(self, "Test File Info", formatted)
+
+                # Push the loaded test definition to the MCU so Start can use it
+                try:
+                    self._send_test_definition(data)
+                    self._log("[SYS] Test definition sent to MCU.")
+                except Exception as e:
+                    QMessageBox.warning(self, "MCU", f"Failed to send test definition:\n{e}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load file: {e}")
 
@@ -1009,6 +1170,100 @@ class DCTGui(QMainWindow):
         ts = datetime.now().strftime("[%H:%M:%S]")
         self.log_output.append(f"{ts} {msg}")
 
+
+# NEW: lightweight waveform plotting widget (pure PyQt)
+class WaveformWidget(QWidget):
+    def __init__(self, max_points=300, parent=None):
+        super().__init__(parent)
+        self.max_points = max_points
+        self.data = []
+        self.vmin = 0.0
+        self.vmax = 5.0
+        self.setMinimumHeight(160)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def set_range(self, vmin, vmax):
+        self.vmin, self.vmax = float(vmin), float(vmax)
+        self.update()
+
+    def clear(self):
+        self.data.clear()
+        self.update()
+
+    def append(self, v):
+        try:
+            v = float(v)
+        except Exception:
+            return
+        self.data.append(v)
+        if len(self.data) > self.max_points:
+            self.data = self.data[-self.max_points:]
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        # leave extra room for Y labels (left) and X labels (bottom)
+        left_margin = 40
+        bottom_margin = 24
+        top_margin = 8
+        right_margin = 8
+        rect = self.rect().adjusted(left_margin, top_margin, -right_margin, -bottom_margin)
+
+        # background and frame
+        painter.fillRect(rect, QColor(245, 245, 245))
+        frame_pen = QPen(QColor(200, 200, 200)); frame_pen.setWidth(1)
+        painter.setPen(frame_pen)
+        painter.drawRect(rect)
+
+        # axes (Y on left, X on bottom)
+        axis_pen = QPen(QColor(50, 50, 50)); axis_pen.setWidth(1)
+        painter.setPen(axis_pen)
+        painter.drawLine(int(rect.left()), int(rect.top()), int(rect.left()), int(rect.bottom()))   # Y axis
+        painter.drawLine(int(rect.left()), int(rect.bottom()), int(rect.right()), int(rect.bottom())) # X axis
+
+        # horizontal grid lines + Y ticks/labels
+        grid_pen = QPen(QColor(220, 220, 220)); grid_pen.setWidth(1)
+        painter.setFont(QFont("Sans", 9))
+        ticks = 5
+        h = rect.height(); w = rect.width()
+        for i in range(ticks + 1):
+            yf = rect.top() + i * (h / ticks)
+            yi = int(round(yf))
+            # light grid
+            painter.setPen(grid_pen)
+            painter.drawLine(int(rect.left()), yi, int(rect.right()), yi)
+            # tick on Y axis
+            painter.setPen(axis_pen)
+            painter.drawLine(int(rect.left()) - 5, yi, int(rect.left()), yi)
+            # label (invert i->value so top = vmax)
+            v = self.vmax - (i * (self.vmax - self.vmin) / ticks)
+            label_rect_x = rect.left() - left_margin
+            painter.drawText(int(label_rect_x), yi - 8, left_margin - 6, 16, Qt.AlignRight | Qt.AlignVCenter, f"{v:.2f}")
+
+        # optional X ticks (no numeric time values, just markers)
+        xticks = 4
+        for i in range(xticks + 1):
+            xf = rect.left() + i * (w / xticks)
+            xi = int(round(xf))
+            painter.drawLine(xi, int(rect.bottom()), xi, int(rect.bottom()) + 5)
+        # X axis label
+        painter.drawText(int(rect.left()), int(rect.bottom()) + 6, int(w), 16, Qt.AlignHCenter | Qt.AlignTop, "Samples")
+
+        # draw waveform over axes
+        if len(self.data) >= 2 and self.vmax > self.vmin:
+            line_pen = QPen(QColor(30, 30, 30)); line_pen.setWidth(2)
+            painter.setPen(line_pen)
+            n = len(self.data)
+            dx = w / max(1, n - 1)
+            pts = []
+            for i, val in enumerate(self.data):
+                v = min(max(val, self.vmin), self.vmax)
+                norm = (v - self.vmin) / (self.vmax - self.vmin)
+                y = rect.bottom() - norm * h
+                x = rect.left() + i * dx
+                pts.append(QPointF(x, y))
+            if pts:
+                painter.drawPolyline(QPolygonF(pts))
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
